@@ -20,7 +20,9 @@ The Account capability panel calls your local backend, which in turn reads Eleve
 
 ### Experimental desktop call bridge
 
-This is a **manual, phrase-level Windows test**, not automatic live interpreting. Use a personal test call, headphones and two virtual audio cables. You must explicitly grant microphone or screen capture permission. Do not test on a managed organization laptop unless its policies allow the audio devices and app.
+This is a **manual, phrase-level Windows test**, not automatic live interpreting. Use a personal test call, headphones and one virtual cable for outgoing speech; a second cable or screen-audio capture is needed for incoming translation. You must explicitly grant microphone or screen capture permission. Do not test on a managed organization laptop unless its policies allow the audio devices and app.
+
+For a first outgoing-only Teams test with one VB-CABLE, click **Set up my Teams test**. LiveBridge finds `CABLE Input` and named headphones, selects translated English outgoing and original English incoming, and routes generated speech to the cable. In Teams set **Microphone = CABLE Output** and **Speaker = headphones**. Record Telugu, stop, review the English text, then click Speak. The optional test beep goes to the other participant; you will not hear it in your headphones. The advanced controls below are for two-cable or screen-audio experiments.
 
 1. In the page, click **Find audio outputs**, select the playback endpoint of cable A (for VB-CABLE, `CABLE Input`) under **Select outgoing cable**, then press **Use outgoing cable**. In Teams **Settings → Devices**, choose cable A's paired recording endpoint (`CABLE Output`) as the **microphone**. Do not select your physical microphone there. Press **Test outgoing route** and confirm the Teams microphone meter responds in a test call. The tone may be audible to the other participant.
 2. Select your physical headphones under **Select headphones**, then press **Use headphones** for private translated playback. Do not choose the same output as the outgoing cable.

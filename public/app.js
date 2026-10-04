@@ -47,8 +47,33 @@ async function findOutputs() {
       if ([...select.options].some(option => option.value === previous)) select.value = previous;
     }
     bridgeStatus(outputsFound.length ? 'Select a named cable and headphones, then press their Use buttons.' : 'No named audio outputs found. Check Windows devices and microphone permission.');
+    return outputsFound;
   } catch (error) { bridgeStatus(`Could not list outputs: ${error.message}`); }
   finally { mic?.getTracks().forEach(track => track.stop()); }
+}
+
+async function setupTeams() {
+  $('setupTeams').disabled = true;
+  $('teamsSteps').textContent = 'Finding the virtual cable and headphones…';
+  try {
+    const devices = await findOutputs();
+    if (!devices?.length) throw new Error('No audio outputs were listed. Allow microphone access and try again.');
+    const cable = devices.find(device => /cable input/i.test(device.label));
+    const headphones = devices.find(device => device.deviceId !== cable?.deviceId && /oneplus|headphone|headset|earbud/i.test(device.label));
+    if (!cable) throw new Error('CABLE Input is missing. Restart the browser after installing the virtual cable.');
+    if (!headphones) throw new Error('I could not identify your headphones. Select them in Advanced audio controls.');
+    $('outgoingOutput').value = cable.deviceId;
+    $('headphoneOutput').value = headphones.deviceId;
+    $('outgoingMode').value = 'translated';
+    $('incomingMode').value = 'original';
+    stopPassthrough();
+    await chooseOutput('outgoing');
+    await chooseOutput('incoming');
+    if (outputs.outgoing !== cable.deviceId || outputs.incoming !== headphones.deviceId) throw new Error('The browser could not route audio to both devices. Read the status below.');
+    $('teamsSteps').textContent = 'Ready in LiveBridge. In Teams select Microphone: CABLE Output and Speaker: your headphones. Record Telugu below, review English, then click Speak. Only the other participant hears the test beep.';
+    bridgeStatus(`Outgoing: ${cable.label} · Private listening: ${headphones.label}. Incoming English remains on Teams headphones.`);
+  } catch (error) { $('teamsSteps').textContent = error.message; }
+  finally { $('setupTeams').disabled = false; }
 }
 
 async function testOutbound() {
@@ -308,6 +333,7 @@ async function play() {
 buttons.forEach(button => button.addEventListener('click', () => toggleRecording(button.dataset.direction, button)));
 $('chooseOutbound').addEventListener('click', () => chooseOutput('outgoing'));
 $('findOutputs').addEventListener('click', findOutputs);
+$('setupTeams').addEventListener('click', setupTeams);
 $('testOutbound').addEventListener('click', testOutbound);
 $('chooseHeadphones').addEventListener('click', () => chooseOutput('incoming'));
 $('listInputs').addEventListener('click', listInputs);
