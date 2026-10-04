@@ -1,6 +1,6 @@
 # LiveBridge-AI · ElevenLabs-first Telugu ⇄ English POC
 
-A one-phrase speech translation prototype. The subscriber records Telugu or English, **ElevenLabs Scribe v2** transcribes it, **Sarvam Translate** converts the text, and **ElevenLabs TTS** speaks the reviewed translation in a selected available voice. The other caller installs nothing in the eventual product. This milestone uses the same local microphone to test both directions; no meeting routing or personal voice enrollment is implemented yet.
+A one-phrase speech translation prototype. Choose independently whether the client hears your original recording or translated English, and whether you hear an original English test recording or translated Telugu. Original mode plays the captured audio locally without provider calls. Translated mode uses **ElevenLabs Scribe v2**, **Sarvam Translate**, and **ElevenLabs TTS** after text review. Incoming audio can use the local microphone for testing or an explicitly selected call-audio capture. An experimental desktop bridge routes speech to a selected virtual cable; personal voice enrollment is not implemented.
 
 ## Windows setup
 
@@ -12,13 +12,27 @@ $env:SARVAM_API_KEY = "YOUR_SARVAM_API_KEY"
 npm start
 ```
 
-Open `http://127.0.0.1:4173` in Edge or Chrome, allow microphone access, select the voice and model returned by your ElevenLabs account, and record a short phrase. Click again to stop. Review the original text, **edit the translation if necessary**, then click **Speak reviewed translation**. The audio is delivered to your browser speaker, not to a meeting app. Use headphones. `npm test` runs the mocked provider and server tests without spending credits or installing packages.
+Open `http://127.0.0.1:4173` in Edge or Chrome, allow microphone access, preview and choose voices, then choose Original or Translated separately for each direction. Record a short phrase and click again to stop. In Translated mode, **edit the translation if necessary** before generating speech. In Original mode, play back the captured recording without API usage. The choice applies to the next recording. For a local test, audio plays in the browser. The experimental desktop bridge can send it to a selected virtual cable for a test call; it has not been verified on Windows devices. Use headphones. `npm test` runs mocked provider and server tests without spending credits or installing packages.
 
 The Account capability panel calls your local backend, which in turn reads ElevenLabs subscription, models and voice IDs. It reports `can_use_instant_voice_cloning` and `can_use_professional_voice_cloning` returned for **your API key**. Voice Design, voice-library availability and cloning are different capabilities. Select a personally owned voice if it appears; this version never creates or clones a voice. Do not paste an API key into this page, commit it, or send it in chat.
 
 ## Pipeline and boundaries
 
-`Default microphone → recorded short clip → ElevenLabs Scribe v2 → Sarvam Translate v1 → on-screen review → ElevenLabs v3 TTS → default speaker`
+### Experimental desktop call bridge
+
+This is a **manual, phrase-level Windows test**, not automatic live interpreting. Use a personal test call, headphones and two virtual audio cables. You must explicitly grant microphone or screen capture permission. Do not test on a managed organization laptop unless its policies allow the audio devices and app.
+
+1. In the page, click **Choose outgoing cable** and select the playback endpoint of cable A (for VB-CABLE, `CABLE Input`). In Teams **Settings → Devices**, choose cable A's paired recording endpoint (`CABLE Output`) as the **microphone**. Do not select your physical microphone there. Press **Test outgoing route** and confirm the Teams microphone meter responds in a test call. The tone may be audible to the other participant.
+2. Click **Choose headphones** and select your physical headphones for incoming translated playback.
+3. For incoming translation, set the call app **speaker** to cable B's playback endpoint. In LiveBridge click **Find call audio inputs**, select cable B's paired recording endpoint, then **Connect incoming audio**. Alternatively select screen/system audio and explicitly share the call app's audio in the browser picker. Screen capture varies by browser and may include unrelated sounds or your own output.
+4. For **Original outgoing**, the browser feeds your physical mic to cable A while the mode is active. For **Translated outgoing**, record a short phrase, review the text, then click Speak. The generated audio is sent to cable A. Do not keep original pass-through on while playing a translated phrase.
+5. For **Translated incoming**, record a short captured phrase, review it, and play the Telugu audio in your headphones. For **Original incoming**, choose your physical headphones directly as the call app speaker; no LiveBridge capture is needed.
+
+The two directions are independent. This POC never interprets continuously: click Stop after each phrase, review the translation, and then click Speak. If the caller speaks over the translated audio, wait and capture a new phrase. Do not rely on this for a time-sensitive or confidential work call; the remote audio and transcript are sent to the configured providers.
+
+The browser cannot automatically change Teams/Zoom device settings. Browser output selection needs `selectAudioOutput` and `setSinkId` support. If it fails, stop the test rather than sending a phrase to the wrong device. This prototype does not integrate with mobile, PSTN, WhatsApp personal calls, or automatic speech turns. A live two-person test must verify routing, echoes and latency before any use in a real meeting.
+
+`Microphone or captured call audio → short clip → ElevenLabs Scribe v2 → Sarvam Translate v1 → on-screen review → ElevenLabs v3 TTS → selected output`
 
 The ElevenLabs key and Sarvam key stay in the Node server process. The browser sends a recorded phrase to `POST /api/translate`, receives recognized and translated text, and only calls `POST /api/speak` after a separate user action. The server has provider classes in `providers.js`; the UI does not contain vendor secrets. The existing Azure version remains available at `/azure.html` as an optional comparison. It requires `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION` and loads Microsoft's SDK from jsDelivr. The main ElevenLabs path does not need Azure.
 
