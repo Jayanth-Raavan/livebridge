@@ -151,6 +151,7 @@ async function listInputs() {
 }
 
 function stopCapture() {
+  if (autoState.incoming) stopAutomatic('incoming');
   if (direction === 'incoming' && recorder?.state === 'recording') recorder.stop();
   callStream?.getTracks().forEach(track => track.stop()); callStream = null;
   $('captureCall').disabled = false; $('stopCapture').disabled = true;
@@ -348,3 +349,115 @@ $('incomingMode').addEventListener('change', () => status('Incoming choice appli
 window.addEventListener('pagehide', () => { stopPassthrough(); stopCapture(); });
 $('play').addEventListener('click', play);
 init();
+
+const autoState = { outgoing: null, incoming: null };
+let playingAutomatic = false;
+const autoStatus = message => { $('autoStatus').textContent = message; };
+
+async function toggleAutomatic(kind) {
+  if (autoState[kind]) return stopAutomatic(kind);
+  const outgoing = kind === 'outgoing';
+  if (outgoing && !outputs.outgoing) return autoStatus('Set up the outgoing cable first.');
+  if (!outgoing && !outputs.incoming) return autoStatus('Run Set up my Teams test to choose your headphones first.');
+  if (!outgoing && !callStream?.getAudioTracks().length) {
+    autoStatus('In the browser picker, share a screen with system audio enabled to capture Teams.');
+    await captureCall();
+    if (!callStream?.getAudioTracks().length) return autoStatus('No incoming audio was shared. Try again and enable Share system audio in the browser picker.');
+  }
+  if (!outgoing && $('incomingMode').value !== 'translated') $('incomingMode').value = 'translated';
+  if (outgoing && $('outgoingMode').value !== 'translated') { $('outgoingMode').value = 'translated'; stopPassthrough(); }
+  let source, context;
+  try {
+    source = outgoing
+      ? await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+      : new MediaStream(callStream.getAudioTracks().map(track => track.clone()));
+    context = new AudioContext();
+    const analyser = context.createAnalyser(); analyser.fftSize = 2048;
+    context.createMediaStreamSource(source).connect(analyser);
+    const state = { source, context, analyser, data: new Float32Array(analyser.fftSize), recorder: null, chunks: [], busy: false, speechAt: 0, quietAt: 0, resumeAt: 0, discard: false, frame: 0 };
+    autoState[kind] = state;
+    $(outgoing ? 'autoOutgoing' : 'autoIncoming').textContent = outgoing ? 'Stop my automatic translation' : 'Stop client automatic translation';
+    autoStatus(`${outgoing ? 'Your microphone' : 'Captured client audio'} is listening for speech. Pause briefly to send a phrase.`);
+    monitorAutomatic(kind, state);
+  } catch (error) {
+    source?.getTracks().forEach(track => track.stop()); await context?.close();
+    autoStatus(`Could not start automatic translation: ${error.message}`);
+  }
+}
+
+function monitorAutomatic(kind, state) {
+  if (autoState[kind] !== state) return;
+  state.analyser.getFloatTimeDomainData(state.data);
+  const rms = Math.sqrt(state.data.reduce((sum, value) => sum + value * value, 0) / state.data.length);
+  const now = performance.now(), audible = rms > 0.022;
+  if (!state.busy && !playingAutomatic && now > state.resumeAt) {
+    if (audible && !state.recorder) {
+      const format = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(type => MediaRecorder.isTypeSupported(type));
+      state.chunks = []; state.speechAt = now; state.quietAt = 0;
+      state.recorder = new MediaRecorder(state.source, format ? { mimeType: format } : undefined);
+      state.recorder.ondataavailable = event => { if (event.data.size) state.chunks.push(event.data); };
+      state.recorder.onstop = () => {
+        const blob = new Blob(state.chunks, { type: state.recorder.mimeType });
+        state.recorder = null;
+        if (state.discard) { state.discard = false; state.busy = false; return; }
+        if (autoState[kind] === state && blob.size && performance.now() - state.speechAt > 350) processAutomatic(kind, state, blob);
+        else state.busy = false;
+      };
+      state.recorder.start();
+    }
+    if (state.recorder) {
+      if (audible) state.quietAt = 0;
+      else if (!state.quietAt) state.quietAt = now;
+      if ((state.quietAt && now - state.quietAt > 850) || now - state.speechAt > 12000) {
+        state.busy = true; state.recorder.stop();
+      }
+    }
+  }
+  state.frame = requestAnimationFrame(() => monitorAutomatic(kind, state));
+}
+
+async function processAutomatic(kind, state, blob) {
+  const outgoing = kind === 'outgoing';
+  try {
+    autoStatus(`${outgoing ? 'Your Telugu' : 'Client English'} phrase ended. Transcribing and translating…`);
+    const response = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': blob.type, 'X-Direction': kind }, body: blob });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Translation failed');
+    $('original').textContent = data.original;
+    $('translated').value = data.translated;
+    if (!data.translated?.trim()) throw new Error('No translated speech was returned.');
+    const voiceId = selectedVoices[kind];
+    if (!voiceId) throw new Error('Select a voice for this direction.');
+    autoStatus(`Heard: ${data.original} · Speaking: ${data.translated}`);
+    const speech = await fetch('/api/speak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: data.translated, voiceId, modelId: $('model').value }) });
+    if (!speech.ok) { const error = await speech.json(); throw new Error(error.error || 'Voice generation failed'); }
+    if (autoState[kind] !== state) return;
+    const url = URL.createObjectURL(await speech.blob());
+    const audio = new Audio(url);
+    try {
+      await audio.setSinkId(outgoing ? outputs.outgoing : outputs.incoming);
+      playingAutomatic = true;
+      for (const active of Object.values(autoState)) {
+        if (active?.recorder?.state === 'recording') { active.discard = true; active.recorder.stop(); }
+      }
+      await audio.play();
+      await new Promise(resolve => { audio.onended = resolve; audio.onerror = resolve; });
+    } finally { playingAutomatic = false; for (const active of Object.values(autoState)) if (active) active.resumeAt = performance.now() + 600; URL.revokeObjectURL(url); }
+  } catch (error) { autoStatus(`Automatic ${kind} failed: ${error.message}`); }
+  finally { state.busy = false; state.quietAt = performance.now(); }
+}
+
+async function stopAutomatic(kind) {
+  const state = autoState[kind]; if (!state) return;
+  autoState[kind] = null;
+  cancelAnimationFrame(state.frame);
+  if (state.recorder?.state === 'recording') state.recorder.stop();
+  state.source.getTracks().forEach(track => track.stop());
+  await state.context.close();
+  $(kind === 'outgoing' ? 'autoOutgoing' : 'autoIncoming').textContent = kind === 'outgoing' ? 'Start my Telugu → client English' : 'Start client English → my Telugu';
+  autoStatus(`${kind === 'outgoing' ? 'Your' : 'Client'} automatic translation stopped.`);
+}
+
+$('autoOutgoing').addEventListener('click', () => toggleAutomatic('outgoing'));
+$('autoIncoming').addEventListener('click', () => toggleAutomatic('incoming'));
+window.addEventListener('pagehide', () => { stopAutomatic('outgoing'); stopAutomatic('incoming'); });
