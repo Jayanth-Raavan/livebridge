@@ -11,17 +11,44 @@ function setButtons(disabled) { buttons.forEach(button => button.disabled = disa
 const bridgeStatus = message => { $('bridgeStatus').textContent = message; };
 
 async function chooseOutput(kind) {
-  if (!navigator.mediaDevices.selectAudioOutput || !HTMLMediaElement.prototype.setSinkId) {
-    bridgeStatus('This browser cannot choose a separate audio output. Try current Edge or Chrome on Windows.');
+  if (!HTMLMediaElement.prototype.setSinkId) {
+    bridgeStatus('This browser cannot route audio to another output. Open this page in current Edge or Chrome on Windows.');
     return;
   }
   try {
-    const device = await navigator.mediaDevices.selectAudioOutput();
-    outputs[kind] = device.deviceId;
+    const select = $(kind === 'outgoing' ? 'outgoingOutput' : 'headphoneOutput');
+    let id = select.value, label = select.selectedOptions[0]?.textContent;
+    if (!id && navigator.mediaDevices.selectAudioOutput) {
+      const device = await navigator.mediaDevices.selectAudioOutput();
+      id = device.deviceId; label = device.label;
+    }
+    if (!id || id === 'default') return bridgeStatus('Choose a named audio output, then press Use. The system default is unsafe for call routing.');
+    if (id === outputs[kind === 'outgoing' ? 'incoming' : 'outgoing']) return bridgeStatus('Choose different devices for the outgoing cable and private headphones.');
+    const probe = document.createElement('audio');
+    await probe.setSinkId(id);
+    outputs[kind] = id;
     if (kind === 'outgoing') $('testOutbound').disabled = false;
-    bridgeStatus(`${kind === 'outgoing' ? 'Outgoing cable' : 'Your headphones'}: ${device.label}. ${outputs.outgoing && outputs.incoming ? 'Both outputs selected.' : 'Choose the other output too.'}`);
+    bridgeStatus(`${kind === 'outgoing' ? 'Outgoing cable' : 'Your headphones'}: ${label}. ${outputs.outgoing && outputs.incoming ? 'Both outputs selected.' : 'Choose the other output too.'}`);
     if (kind === 'outgoing' && $('outgoingMode').value === 'original') await startPassthrough();
   } catch (error) { bridgeStatus(`Audio output selection failed: ${error.message}`); }
+}
+
+async function findOutputs() {
+  if (!navigator.mediaDevices?.enumerateDevices || !HTMLMediaElement.prototype.setSinkId) return bridgeStatus('Open this page in current Edge or Chrome on Windows to route audio.');
+  let mic;
+  try {
+    mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const outputsFound = devices.filter(device => device.kind === 'audiooutput' && device.deviceId && device.deviceId !== 'default' && device.deviceId !== 'communications');
+    for (const id of ['outgoingOutput', 'headphoneOutput']) {
+      const select = $(id), previous = select.value;
+      select.replaceChildren(new Option(id === 'outgoingOutput' ? 'Select outgoing cable' : 'Select headphones', ''));
+      for (const device of outputsFound) select.add(new Option(device.label || 'Unnamed output', device.deviceId));
+      if ([...select.options].some(option => option.value === previous)) select.value = previous;
+    }
+    bridgeStatus(outputsFound.length ? 'Select a named cable and headphones, then press their Use buttons.' : 'No named audio outputs found. Check Windows devices and microphone permission.');
+  } catch (error) { bridgeStatus(`Could not list outputs: ${error.message}`); }
+  finally { mic?.getTracks().forEach(track => track.stop()); }
 }
 
 async function testOutbound() {
@@ -280,6 +307,7 @@ async function play() {
 
 buttons.forEach(button => button.addEventListener('click', () => toggleRecording(button.dataset.direction, button)));
 $('chooseOutbound').addEventListener('click', () => chooseOutput('outgoing'));
+$('findOutputs').addEventListener('click', findOutputs);
 $('testOutbound').addEventListener('click', testOutbound);
 $('chooseHeadphones').addEventListener('click', () => chooseOutput('incoming'));
 $('listInputs').addEventListener('click', listInputs);
