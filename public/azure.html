@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LiveBridge · Speech POC</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/microsoft-cognitiveservices-speech-sdk@1.52.0/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle-min.js"></script>
+  <script type="module" src="/azure-app.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <header><div class="mark">LB<span>•</span></div><span class="eyebrow">LIVEBRIDGE / LAB 01</span><span class="tag">Speech POC</span></header>
+    <section class="hero">
+      <div class="line"></div><p class="eyebrow">TELUGU ⇄ ENGLISH</p>
+      <h1>Speak your language.<br><em>Hear theirs.</em></h1>
+      <p class="intro">Test one spoken phrase at a time. The original and translation appear below, then a standard AI voice speaks the result.</p>
+      <div class="pill"><span class="dot"></span><span id="status" role="status" aria-live="polite">Checking local setup…</span></div>
+    </section>
+    <section class="grid" aria-label="Translation directions">
+      <article class="card"><div class="number">01 / OUTGOING</div><h2>Telugu <span>→</span> English</h2><p>Speak naturally in Telugu, including English technical terms.</p><button data-direction="outgoing">Speak Telugu <span>↗</span></button><small>Uses your default microphone and speaker</small></article>
+      <article class="card"><div class="number">02 / INCOMING TEST</div><h2>English <span>→</span> Telugu</h2><p>Speak the English client’s phrase into your own microphone to test the return path.</p><button data-direction="incoming">Speak English <span>↗</span></button><small>Meeting audio capture comes in a later phase</small></article>
+    </section>
+    <section class="transcript"><div class="transcript-head"><h2>Live result</h2><span>ONE PHRASE AT A TIME</span></div><div class="results"><div><label>ORIGINAL SPEECH</label><p id="original">Your words appear here.</p></div><div><label>TRANSLATION / SPOKEN OUTPUT</label><p id="translated">The translation appears here.</p></div></div><p id="review" class="review" hidden>Check numbers, money, dates, names, and commitments before relying on this translation.</p><p id="metrics" class="metrics">Timing appears after a successful phrase.</p></section>
+    <footer><span>LOCAL PROTOTYPE · STANDARD VOICES</span><span>No call routing or voice cloning in this milestone.</span></footer>
+  </main>
+</body>
+</html>
